@@ -3,6 +3,7 @@ from market.market import Market
 from Database import Database
 from random_events.random_events import random_eventer
 from Bank.bank import Bank
+import customtkinter as ctk
 import json
 import time
 import math
@@ -22,6 +23,12 @@ class Engine:
         self.database.rawMsgCallback = self.rawMsgCallback
         self.database.newConnCallback = self.newPlayer
         self.database.bankActionCallback = self.process_bank_action
+        self.doautobuy = ctk.BooleanVar(value=False)
+        self.autobuyprice = ctk.StringVar(value="")
+        self.selectedstock = ctk.StringVar(value="")
+        self.autosellprice = ctk.StringVar(value="")
+        self.autobuyammount = ctk.StringVar(value="")
+        self.autobuyrefresh = None
         self.onMarketLoaded = None
         self.database.startThread()
         self.config = {
@@ -215,6 +222,51 @@ class Engine:
                 messages.pop(0)
             self.database.set("messages", messages)
 
+    def process_auto_trade(self):
+        if not self.doautobuy.get() or not self.market:
+            #print("Autobuy error/not active")
+            return
+
+        try:
+            amount = int(self.autobuyammount.get())
+            if amount <= 0:
+                return
+        except ValueError:
+            #print("Invalid buy ammount")
+            return
+
+        try:
+            sell_target = float(self.autosellprice.get()) if self.autosellprice.get().strip() else None
+        except ValueError:
+            sell_target = None
+
+        try:
+            buy_target = float(self.autobuyprice.get()) if self.autobuyprice.get().strip() else None
+        except ValueError:
+            buy_target = None
+
+        if sell_target is None and buy_target is None:
+            #print("No auto buy/sell price")
+            return
+
+        stock = self.market.find_stock_by_long_name(self.selectedstock.get())
+        if not stock:
+            return
+        elif sell_target is not None and stock.price >= sell_target:
+            if self.hosting:
+                self.sell(self.username, stock.ticker, amount)
+            else:
+                self.database.sendAsClient(f"/sell {stock.ticker} {amount}")
+
+        elif buy_target is not None and stock.price <= buy_target:
+            if self.hosting:
+                self.buy(self.username, stock.ticker, amount)
+            else:
+                self.database.sendAsClient(f"/buy {stock.ticker} {amount}")
+    
+        if self.autobuyrefresh:
+            self.autobuyrefresh()
+
     def tick(self):
         if self.hosting:
             self.iteration += 1
@@ -272,6 +324,7 @@ class Engine:
                         "prices": {t: s.price for t, s in self.market.stocks.items()},
                     },
                 )
+            self.process_auto_trade()
         else:
             snap = self.database.get("market")
             if snap and snap.get("id") != self.snapshot_id:
@@ -311,8 +364,10 @@ class Engine:
                 if isinstance(saved_loans, dict):
                     self.bank.player_loans = saved_loans
             
-            
             td = self.database.get("tick")
             if td and td.get("iteration", 0) > self.iteration and self.market:
                 self.iteration = td["iteration"]
                 self.market.apply_tick(td["prices"])
+
+            self.process_auto_trade()
+

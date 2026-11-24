@@ -12,8 +12,8 @@ class MarketView(ctk.CTkFrame):
         self.controller = controller
 
         self.engine = engine
+        self.engine.autobuyrefresh = self._refresh_owned_shares
         self._last_displayed_event = None
-
 
         self.current_stock = list(self.engine.market.stocks.values())[
             0
@@ -55,6 +55,7 @@ class MarketView(ctk.CTkFrame):
         found = self.engine.market.find_stock_by_long_name(stock_name)
         if found is not None:
             self.current_stock = found
+            self.engine.selectedstock.set(stock_name)
             self.refresh()
 
     # Construire la barre du haut
@@ -67,6 +68,7 @@ class MarketView(ctk.CTkFrame):
         self.name_select = ctk.CTkComboBox(
             bar,
             values=options,
+            variable=self.engine.selectedstock,
             command=self.switch_data,
             fg_color="#2b313a",
             button_color="#363c4e",
@@ -74,6 +76,7 @@ class MarketView(ctk.CTkFrame):
             width=180,
         )
         self.name_select.set(options[0] if options else "")
+        self.engine.selectedstock.set(f"{self.current_stock.name} ({self.current_stock.ticker})")
         self.name_select.pack(side="left", padx=12, pady=8)
 
         # Clavier pour la complétion automatique
@@ -303,6 +306,29 @@ class MarketView(ctk.CTkFrame):
         )
         self.owned_shares_label.pack(anchor="w", padx=14, pady=(4, 0))
         self._refresh_owned_shares()
+
+        self.auto_buy_checkbox = ctk.CTkCheckBox(panel,text="Auto buy ?",variable=self.engine.doautobuy)
+        self.auto_buy_checkbox.pack(fill="x", padx=12, pady=4)
+
+        ctk.CTkLabel(
+            panel, text="Quantité (actions) automatique ", text_color="#848e9c", font=("Arial", 11)
+        ).pack(anchor="w", padx=14, pady=(10, 0))
+        self.auto_buy_ammount = ctk.CTkEntry(panel, fg_color="#2b313a", border_width=0,textvariable=self.engine.autobuyammount)
+        self.auto_buy_ammount.pack(fill="x", padx=12, pady=4)
+        self.auto_buy_ammount.insert(0, "1")
+
+
+        ctk.CTkLabel(
+            panel, text="Prix achat automatique", text_color="#848e9c", font=("Arial", 11)
+        ).pack(anchor="w", padx=14, pady=(10, 0))
+        self.auto_buy_price = ctk.CTkEntry(panel, fg_color="#2b313a", border_width=0, textvariable=self.engine.autobuyprice)
+        self.auto_buy_price.pack(fill="x", padx=12, pady=4)
+
+        ctk.CTkLabel(
+            panel, text="Prix vente automatique", text_color="#848e9c", font=("Arial", 11)
+        ).pack(anchor="w", padx=14, pady=(10, 0))
+        self.auto_sell_price = ctk.CTkEntry(panel, fg_color="#2b313a", border_width=0,textvariable=self.engine.autosellprice)
+        self.auto_sell_price.pack(fill="x", padx=12, pady=4)
 
         self._refresh_market_pulse()
 
